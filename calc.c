@@ -184,10 +184,11 @@ int main(int argc, char** argv) {
         }
         else {
             if (result >= 0) {
-                printf("%x\n", result);
+                // cast float to unsigned int to avoid printf internal casting to double for printing correct variable value
+                printf("%x\n", (unsigned int)result);
             }
             else {
-                printf("-%x\n", result * -1);
+                printf("-%x\n", (unsigned int)result * -1);
             }
         }
     }
