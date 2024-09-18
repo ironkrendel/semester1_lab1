@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
+#include <regex.h>
 
 #define HELP_PARAMTER_FORMAT "  %-50s %s\n"
 
@@ -17,6 +18,10 @@
 #define INT_PARAM 2
 #define EXPRESSION_PARAM 3
 
+regex_t operand_pattern;
+regex_t operator_pattern;
+regex_t unknown_argument_pattern;
+
 int main(int argc, char** argv) {
     if (argc <= 1) {
         printf("Calculator program\n");
@@ -27,11 +32,18 @@ int main(int argc, char** argv) {
 
     int output_format = DEC_OUT;
     int operand_type = FLOAT_TYPE;
-    int previous_parameter = -1;
+    int previous_argument = -1;
 
-    char* operator = malloc(10);
+    char* operator;
 
     float operand1, operand2, result;
+
+    int expression_current_argument = 0;
+
+    // compile regex
+    regcomp(&operand_pattern, "^[-]?[0-9]+[.]?[0-9]*$", REG_EXTENDED | REG_NOSUB);
+    regcomp(&operator_pattern, "^[-+*/]|and|or$", REG_EXTENDED | REG_NOSUB);
+    regcomp(&unknown_argument_pattern, "^[-]+.*$", REG_EXTENDED | REG_NOSUB);
 
     for (int arg = 1;arg < argc;arg++) {
         if (strcmp(argv[arg], "-h") == 0 || strcmp(argv[arg], "--help") == 0) {
@@ -40,7 +52,7 @@ int main(int argc, char** argv) {
 
             printf(HELP_PARAMTER_FORMAT, "-h, --help", "Show help");
 
-            printf(HELP_PARAMTER_FORMAT, "-c <expression>, --calc <expression>", "Calculate expression of \"[operand1] [operator] [operand2]\" format.");
+            printf(HELP_PARAMTER_FORMAT, "-c <expression>, --calc <expression>", "Calculate expression of [operand1] [operator] [operand2] format, where two operands and operator are composed of several arguments.");
             printf(HELP_PARAMTER_FORMAT, "", "Allowed operand types are: integer and floating point for mathematical operations and \"1\" and \"0\" for logical operations.");
             printf(HELP_PARAMTER_FORMAT, "", "Allowed operators are: +, -, *, / and %% for mathematical operations and \"and\" and \"or\" for logical operations.");
 
@@ -48,94 +60,93 @@ int main(int argc, char** argv) {
 
             printf(HELP_PARAMTER_FORMAT, "-i, --int", "Specify operands' format as int. By default operands are treated as floating point numbers.");
 
-            return 0;
+            goto exit_sequence;
         }
         else if (strcmp(argv[arg], "-x") == 0 || strcmp(argv[arg], "--hex") == 0) {
-            if (previous_parameter == CALC_PARAM) {
+            if (previous_argument == CALC_PARAM) {
                 printf("Error in parameter order!\n");
-                printf("Use \"calc -h\" or \"calc --help\" for more information.\n");
+                printf("Use -h or --help for more information.\n");
 
-                return 1;
+                goto exit_sequence;
             }
 
             output_format = HEX_OUT;
 
-            previous_parameter = HEX_PARAM;
+            previous_argument = HEX_PARAM;
         }
         else if (strcmp(argv[arg], "-i") == 0 || strcmp(argv[arg], "--int") == 0) {
-            if (previous_parameter == CALC_PARAM) {
+            if (previous_argument == CALC_PARAM) {
                 printf("Error in parameter order!\n");
-                printf("Use \"calc -h\" or \"calc --help\" for more information.\n");
+                printf("Use -h or --help for more information.\n");
 
-                return 1;
+                goto exit_sequence;
             }
 
             operand_type = INT_TYPE;
 
-            previous_parameter = INT_PARAM;
+            previous_argument = INT_PARAM;
         }
         else if (strcmp(argv[arg], "-c") == 0 || strcmp(argv[arg], "--calc") == 0) {
-            previous_parameter = CALC_PARAM;
+            previous_argument = CALC_PARAM;
         }
         else {
-            if (argv[arg][0] == '-' && sizeof(argv[arg]) > 1)
-                if (!(argv[arg][1] >= '0' && argv[arg][1] <= '9')) {
-                    printf("Unknown parameter!\n");
-                    printf("Use \"calc -h\" or \"calc --help\" for more information.\n");
+            if (previous_argument != CALC_PARAM && previous_argument != EXPRESSION_PARAM) {
+                if (regexec(&unknown_argument_pattern, argv[arg], 0, NULL, 0) == 0) {
+                    printf("Unknown argument passed.\n");
+                    printf("Use -h or --help for more information.\n");
+                }
+                else 
+                printf("Error in argument order. Expression must come after -c (--calc) argument\n");
 
-                    return 1;
-                } 
-
-            if (previous_parameter != CALC_PARAM) continue;
-
-            previous_parameter = EXPRESSION_PARAM;
-
-            char buffer[100] = "";
-            
-            int i = 0;
-            int j = 0;
-
-            // operand 1
-            while ((argv[arg][i] >= '0' && argv[arg][i] <= '9') || argv[arg][i] == '-' || argv[arg][i] == '.') {
-                buffer[j] = argv[arg][i];
-                i++;j++;
+                goto exit_sequence;
             }
-            buffer[j] = '\0';
-            operand1 = atof(buffer);
 
-            // skip to operator
-            while (argv[arg][i] == ' ') i++;
-            
-            // operator
-            j = 0;
-            while (argv[arg][i] != ' ') {
-                buffer[j] = argv[arg][i];
-                i++;
-                j++;
+            previous_argument = EXPRESSION_PARAM;
+
+            if (expression_current_argument % 2 == 0) {
+                if (regexec(&operand_pattern, argv[arg], 0, NULL, 0) == REG_NOMATCH) {
+                    printf("Wrong expression format!\n");
+                    printf("Use -h or --help for more information.\n");
+
+                    goto exit_sequence;
+                }
+
+                if (expression_current_argument == 0) operand1 = atof(argv[arg]);
+                else if (expression_current_argument == 2) operand2 = atof(argv[arg]);
+                else {
+                    printf("Too much arguments passed after -c (--calc) flag!\n");
+                    printf("Use -h or --help for more information.\n");
+
+                    goto exit_sequence;
+                }
             }
-            buffer[j] = '\0';
-            strcpy(operator, buffer);
+            else {
+                if (regexec(&operator_pattern, argv[arg], 0, NULL, 0) == REG_NOMATCH) {
+                    printf("Wrong expression format!\n");
+                    printf("Use -h or --help for more information.\n");
 
-            // skip to operand 2
-            while (!((argv[arg][i] >= '0' && argv[arg][i] <= '9') || argv[arg][i] == '-' || argv[arg][i] == '.')) i++;
+                    goto exit_sequence;
+                }
 
-            // operand 2
-            j = 0;
-            while ((argv[arg][i] >= '0' && argv[arg][i] <= '9') || argv[arg][i] == '-' || argv[arg][i] == '.') {
-                buffer[j] = argv[arg][i];
-                i++;j++;
+                if (expression_current_argument == 1) operator = argv[arg];
+                else {
+                    printf("Too much arguments passed after -c (--calc) flag!\n");
+                    printf("Use -h or --help for more information.\n");
+
+                    goto exit_sequence;
+                }
             }
-            buffer[j] = '\0';
-            operand2 = atof(buffer);
+
+            expression_current_argument++;
         }
     }
 
     if (operand_type == INT_TYPE) {
         if (operand1 != (int)operand1 || operand2 != (int)operand2) {
-            printf("Error in operands. Operand does not match specified by \"-i\" parameter format.\n");
-            printf("Use \"calc -h\" or \"calc --help\" for more information.\n");
+            printf("Error in operands. Operand does not match specified by -i parameter format.\n");
+            printf("Use -h or --help for more information.\n");
 
-            return 1;
+            goto exit_sequence;
         }
         operand1 = (int)operand1;
         operand2 = (int)operand2;
@@ -157,16 +168,22 @@ int main(int argc, char** argv) {
         result = (int)operand1 % (int)operand2;
     }
     else if (strcmp(operator, "and") == 0) {
+        if (operand1 != 1 && operand1 != 0 || operand2 != 1 && operand2 != 0) {
+            printf("Error in operands. Logic operations are only allow on binary types.\n");
+            printf("Use -h or --help for more information.\n");
+
+            goto exit_sequence;
+        }
         result = (int)operand1 && (int)operand2;
     }
     else if (strcmp(operator, "or") == 0) {
         result = (int)operand1 || (int)operand2;
     }
     else {
-        printf("Unknown operator \"%s\" !\n", operator);
-        printf("Use \"calc -h\" or \"calc --help\" for more information.\n");
-
-        return 1;
+        printf("Unknown operator %s !\n", operator);
+        printf("Use -h or --help for more information.\n");
+        
+        goto exit_sequence;
     }
 
     if (operand_type == INT_TYPE) {
@@ -183,17 +200,19 @@ int main(int argc, char** argv) {
             printf("%f\n", result);
         }
         else {
-            if (result >= 0) {
-                // cast float to unsigned int to avoid printf internal casting to double for printing correct variable value
-                printf("%x\n", (unsigned int)result);
-            }
-            else {
-                printf("-%x\n", (unsigned int)result * -1);
-            }
+            printf("%a\n", result);
+            // if (result >= 0) {
+            //     printf("%x\n", (unsigned int)result);
+            // }
+            // else {
+            //     printf("-%x\n", (unsigned int)result * -1);
+            // }
         }
     }
 
-    free(operator);
+    exit_sequence:
+    regfree(&operand_pattern);
+    regfree(&operator_pattern);
 
     return 0;
 }
