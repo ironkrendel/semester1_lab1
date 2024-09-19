@@ -91,11 +91,6 @@ int main(int argc, char** argv) {
         }
         else {
             if (previous_argument != CALC_PARAM && previous_argument != EXPRESSION_PARAM) {
-                if (regexec(&unknown_argument_pattern, argv[arg], 0, NULL, 0) == 0) {
-                    printf("Unknown argument passed.\n");
-                    printf("Use -h or --help for more information.\n");
-                }
-                else 
                 printf("Error in argument order. Expression must come after -c (--calc) argument\n");
 
                 goto exit_sequence;
@@ -130,6 +125,13 @@ int main(int argc, char** argv) {
 
                 if (expression_current_argument == 1) operator = argv[arg];
                 else {
+                    if (regexec(&unknown_argument_pattern, argv[arg], 0, NULL, 0) == 0) {
+                        printf("Unknown argument passed.\n");
+                        printf("Use -h or --help for more information.\n");
+
+                        goto exit_sequence;
+                    }
+
                     printf("Too much arguments passed after -c (--calc) flag!\n");
                     printf("Use -h or --help for more information.\n");
 
@@ -139,6 +141,13 @@ int main(int argc, char** argv) {
 
             expression_current_argument++;
         }
+    }
+
+    if (expression_current_argument < 3) {
+        printf("Not enough arguments provided to form a full expression.\n");
+        printf("Use -h or --help for more information.\n");
+
+        goto exit_sequence;
     }
 
     if (operand_type == INT_TYPE) {
